@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offline Chess</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chessboard.js for the visual board -->
+    <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css" xintegrity="sha384-q94+BZSKpOjrgL/6loTVhGGCRSjpIsIlWXOtodGlGEXAleOKLVmaPYOTvOD7l3AN" crossorigin="anonymous">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Roboto+Slab:wght@700&display=swap" rel="stylesheet">
+    <style>
+        /* Custom styles */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a1a1a; /* Dark background */
+            color: #f0f0f0;
+        }
+        .board-container {
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .controls button {
+            transition: all 0.2s ease-in-out;
+        }
+        .controls button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+        }
+        .status-text {
+            font-family: 'Roboto Slab', serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-md mx-auto">
+        <!-- Title -->
+        <h1 class="text-4xl font-bold text-center text-white mb-2 status-text">Offline Chess</h1>
+        <p class="text-center text-gray-400 mb-6">Practice variations by playing both sides.</p>
+
+        <!-- Chessboard -->
+        <div id="myBoard" class="board-container w-full"></div>
+
+        <!-- Game Status & Controls -->
+        <div class="mt-6 text-center">
+            <div id="status" class="status-text text-xl h-8 mb-4 font-semibold">White to move</div>
+            <div class="controls flex justify-center space-x-4">
+                <button id="undoBtn" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg shadow-md">
+                    Undo
+                </button>
+                 <button id="flipBtn" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg shadow-md">
+                    Flip Board
+                </button>
+                <button id="startBtn" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-lg shadow-md">
+                    New Game
+                </button>
+            </div>
+             <div class="mt-4 text-sm text-gray-500">
+                FEN: <span id="fen" class="font-mono"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript libraries -->
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js" xintegrity="sha384-ZvpUoO/+PpLXR1sAtevFj/XrMLiSozjp9tr9vB2e4XevSpUa2b2LFRaY+n18DCHo" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js" xintegrity="sha384-8Vi8VHwn3vjQ9eUHUxex3JSN/NFqUg3QbPyX8kWyb93+8AC/pPWTzj+nHtbC5bxD" crossorigin="anonymous"></script>
+    <!-- Chess.js for game logic -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.2/chess.js"></script>
+
+    <script>
+        // --- Self-contained JavaScript Logic ---
+
+        // Wait for the DOM to be ready
+        $(document).ready(function() {
+            let board = null; // Will hold the chessboard instance
+            const game = new Chess(); // The game logic engine
+            const statusEl = $('#status');
+            const fenEl = $('#fen');
+
+            // --- Chessboard Event Handlers ---
+
+            function onDragStart(source, piece, position, orientation) {
+                // Do not pick up pieces if the game is over
+                if (game.game_over()) {
+                    return false;
+                }
+            }
+
+            function onDrop(source, target) {
+                // Attempt to make the move
+                const move = game.move({
+                    from: source,
+                    to: target,
+                    promotion: 'q' // NOTE: always promote to a queen for simplicity
+                });
+
+                // If the move is illegal, snap the piece back
+                if (move === null) {
+                    return 'snapback';
+                }
+
+                // Update the board and status after a legal move
+                updateStatus();
+            }
+
+            // Update the board position after the piece snap
+            // for castling, en passant, pawn promotion
+            function onSnapEnd() {
+                board.position(game.fen());
+            }
+            
+            // --- Game Logic and UI Updates ---
+
+            function updateStatus() {
+                let status = '';
+                let moveColor = 'White';
+                if (game.turn() === 'b') {
+                    moveColor = 'Black';
+                }
+
+                // Checkmate?
+                if (game.in_checkmate()) {
+                    status = 'Game Over, ' + moveColor + ' is in checkmate.';
+                }
+                // Draw?
+                else if (game.in_draw()) {
+                    status = 'Game Over, drawn position.';
+                }
+                // Game still on
+                else {
+                    status = moveColor + ' to move';
+                    // Check?
+                    if (game.in_check()) {
+                        status += ', ' + moveColor + ' is in check.';
+                    }
+                }
+
+                statusEl.html(status);
+                fenEl.html(game.fen());
+            }
+
+            // --- Custom Piece Theme ---
+            // This function tells chessboard.js where to find the piece images.
+            // It assumes you have a folder named 'pieces' in the same directory as this HTML file.
+            // Inside 'pieces', your images should be named like 'white_king.png', 'black_pawn.png', etc.
+            function customPieceTheme (piece) {
+              // piece is 'wK', 'bN', etc.
+              const color = piece.startsWith('w') ? 'white' : 'black';
+              const pieceMap = {
+                P: 'pawn',
+                N: 'knight',
+                B: 'bishop',
+                R: 'rook',
+                Q: 'queen',
+                K: 'king'
+              };
+              const pieceName = pieceMap[piece[1]];
+              return `pieces/${color}_${pieceName}.png`;
+            }
+
+
+            // --- Board Initialization ---
+            const config = {
+                draggable: true,
+                position: 'start',
+                onDragStart: onDragStart,
+                onDrop: onDrop,
+                onSnapEnd: onSnapEnd,
+                pieceTheme: customPieceTheme
+            };
+            board = Chessboard('myBoard', config);
+            updateStatus(); // Initial status update
+
+            // --- Button Event Listeners ---
+            $('#startBtn').on('click', function() {
+                game.reset();
+                board.start();
+                updateStatus();
+            });
+
+            $('#undoBtn').on('click', function() {
+                game.undo();
+                board.position(game.fen());
+                updateStatus();
+            });
+            
+            $('#flipBtn').on('click', function() {
+                board.flip();
+            });
+
+            // Make the board responsive
+             $(window).resize(function(){
+                board.resize();
+            });
+        });
+    </script>
+
+</body>
+</html>
